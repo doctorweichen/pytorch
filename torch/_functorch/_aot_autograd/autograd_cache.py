@@ -5,10 +5,8 @@ Utils for caching the outputs of AOTAutograd
 from __future__ import annotations
 
 import contextlib
-import copyreg
 
 import functools
-import io
 import logging
 import os
 import pickle
@@ -37,7 +35,6 @@ from torch._inductor.codecache import (
 from torch._inductor.runtime.runtime_utils import cache_dir
 from torch._subclasses.fake_tensor import (
     extract_tensor_metadata,
-    FakeTensor,
     FakeTensorConverter,
     in_kernel_invocation_manager,
     TensorMetadata,
@@ -434,29 +431,6 @@ def _reduce_fake_tensor(t):
     return (_fake_tensor_from_meta, (metadata,))
 
 
-# TODO: We don't actually need to pickle FakeTensors in the cache. This is done for
-# traced_tangents in this PR, but once we handle traced_tangents properly in the PR above,
-# we can remove this.
-class AOTAutogradCacheEntryPickler(pickle.Pickler):
-    dispatch_table = copyreg.dispatch_table.copy()
-    dispatch_table[FakeTensor] = _reduce_fake_tensor
-
-    @staticmethod
-    def dumps(obj) -> bytes:
-        """
-        Pickle an object using the FxGraphCachePickler.
-        """
-        with io.BytesIO() as stream:
-            pickler = AOTAutogradCacheEntryPickler(stream)
-            pickler.dump(obj)
-            return stream.getvalue()
-
-
-class AOTAutogradCacheEntryUnpickler(pickle.Unpickler):
-    dispatch_table = copyreg.dispatch_table.copy()
-    dispatch_table[FakeTensor] = _reduce_fake_tensor
-
-
 class AOTAutogradCache:
     """
     Caches the results of running AOTAutograd. This class mostly handles the save and load logic, whereas
@@ -551,7 +525,7 @@ class AOTAutogradCache:
         path = os.path.join(subdir, "entry")
         try:
             with open(path, "rb") as f:
-                entry: AOTAutogradCacheEntry = AOTAutogradCacheEntryUnpickler(f).load()
+                entry: AOTAutogradCacheEntry = pickle.load(f)
             return entry
         except Exception as e:
             log.warning("AOTAutograd cache unable to load compiled graph: %s", e)
@@ -561,7 +535,7 @@ class AOTAutogradCache:
     def save(key: str, entry: AOTAutogradCacheEntry):
         """Save a single entry into the cache."""
         try:
-            content = AOTAutogradCacheEntryPickler.dumps(entry)
+            content = pickle.dumps(entry)
         except Exception as e:
             log.warning("AOTAutograd cache unable to serialize compiled graph: %s", e)
             raise e
