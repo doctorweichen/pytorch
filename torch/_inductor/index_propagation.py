@@ -29,6 +29,7 @@ import sympy
 import torch
 from torch._prims_common import dtype_to_type, is_integer_dtype
 from torch.utils._sympy.functions import FloorDiv, ModularIndexing, Where
+from torch.utils._sympy.symbol import free_symbol_is_type, SymT
 from torch.utils._sympy.value_ranges import bound_sympy, ValueRanges
 from .utils import generate_assert
 
@@ -321,6 +322,13 @@ class IndexPropagation:
             # kernels into indirect indexing
 
             expr = sympy.sympify(index.value.expr)
+
+            if free_symbol_is_type(expr, SymT.INDIRECT):
+                # This is the nested indirect indexing case:
+                # a = ops.indirect_indexing(...)
+                # b = ops.index_expr(a, ...)
+                # c = ops.indirect_indexing(b, ...)
+                return Where(expr < 0, expr + size, expr)
 
             # TODO Perhaps move this logic to the simplify indexing pass
             def wrap_expr(expr):
