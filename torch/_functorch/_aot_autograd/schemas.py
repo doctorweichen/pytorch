@@ -150,6 +150,12 @@ class InputAliasInfo:
         return MutationType.MUTATED_OUT_GRAPH
 
 
+# Info about user inputs mutations during joint fn tracing.
+@dataclass(frozen=True)
+class InputJointAliasInfo:
+    mutates_data: bool
+
+
 @dataclass
 class SubclassCreationMeta:
     """
@@ -294,6 +300,10 @@ class ViewAndMutationMeta:
     # side-effectful operators, FunctionalTensorMode will populate this
     # dictionary telling us how many tokens we will need during tracing.
     tokens: Dict[Any, torch.Tensor] = field(default_factory=dict)
+
+    # Info about mutations on user inputs during joint fn tracing.
+    # Filled after jointFn tracing.
+    input_joint_info: Optional[List[InputJointAliasInfo]] = None
 
     def __post_init__(self):
         # pre-compute the indices of the inputs that are mutated.
